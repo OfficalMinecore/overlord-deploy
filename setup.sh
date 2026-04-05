@@ -40,7 +40,7 @@ fi
 
 # 2. Architecture & Binary Selection
 ARCH=$(uname -m)
-BASE_URL="https://github.com/OfficalMinecore/MineAI-Studio/releases/download/v1.0.0"
+BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
 
 if [ "$ARCH" == "x86_64" ]; then
     BINARY_URL="${BASE_URL}/overlord-linux-amd64"
