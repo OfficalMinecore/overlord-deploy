@@ -78,12 +78,30 @@ EOF
 # 6. Service Management
 echo -e "🚀 Starting Overlord Service..."
 systemctl stop overlord-daemon || true
+systemctl daemon-reload
 systemctl enable overlord-daemon
 systemctl start overlord-daemon
+
+# 7. Verification
+echo -e "🔍 Verifying binary execution..."
+sleep 2
+
+if systemctl is-active --quiet overlord-daemon; then
+    echo -e "${GREEN}✅ DAEMON IS RUNNING!${NC}"
+    echo -e "📄 Last 5 logs:"
+    journalctl -u overlord-daemon -n 5 --no-pager
+else
+    echo -e "${RED}❌ DAEMON FAILED TO START!${NC}"
+    echo -e "⚠️  Check logs: journalctl -u overlord-daemon -n 20"
+    exit 1
+fi
 
 echo -e "${BLUE}---------------------------------------${NC}"
 echo -e "${GREEN}✅ INSTALLATION COMPLETE!${NC}"
 echo -e "🛰️  Private-Link API: http://$(hostname -I | awk '{print $1}'):8080"
+echo -e "📂 Binary Path: /usr/local/bin/overlord-daemon"
+echo -e "📂 Service Path: /etc/systemd/system/overlord-daemon.service"
+echo -e "📂 Database Path: /var/lib/overlord/overlord.db (if configured)"
 echo -e "📊 Status: sudo systemctl status overlord-daemon"
 echo -e "${NC}"
 
