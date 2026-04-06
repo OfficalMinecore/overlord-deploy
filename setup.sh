@@ -70,6 +70,9 @@ ExecStart=/usr/local/bin/overlord-daemon
 Restart=always
 Environment=DEPLOY_TOKEN=$DEPLOY_TOKEN
 Environment=CONVEX_URL=$CONVEX_URL
+Environment=PROXMOX_URL=$PROXMOX_URL
+Environment=PROXMOX_TOKEN_ID=$PROXMOX_TOKEN_ID
+Environment=PROXMOX_TOKEN_SECRET=$PROXMOX_TOKEN_SECRET
 
 [Install]
 WantedBy=multi-user.target
