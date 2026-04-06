@@ -55,8 +55,22 @@ fi
 
 # 3. Secure Download & Install
 echo -e "🚚 Downloading Overlord-Daemon (Binary Release)..."
-curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon
+if ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
+    echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
+    exit 1
+fi
+
+# Verify binary integrity
+FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
+if [ "$FILE_SIZE" -lt 1000 ]; then
+    echo -e "${RED}❌ ERROR: Downloaded file is too small ($FILE_SIZE bytes).${NC}"
+    echo -e "${RED}It is likely a 404 page. Check if the release exists at:${NC}"
+    echo -e "${CYAN}$BINARY_URL${NC}"
+    exit 1
+fi
+
 chmod +x /usr/local/bin/overlord-daemon
+echo -e "🎯 Optimized executable installed."
 
 # 4. Environment Variables & Systemd
 echo -e "⚙️  Configuring Overlord Service..."
