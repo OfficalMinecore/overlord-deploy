@@ -137,10 +137,10 @@ fi
 
 echo -e "${BLUE}---------------------------------------${NC}"
 echo -e "${GREEN}✅ INSTALLATION COMPLETE!${NC}"
+echo -e "🖥️  ${CYAN}Local Dashboard:${NC} http://$(hostname -I | awk '{print $1}'):3000"
 echo -e "🛰️  Private-Link API: http://$(hostname -I | awk '{print $1}'):8080"
 echo -e "📂 Binary Path: /usr/local/bin/overlord-daemon"
 echo -e "📂 Service Path: /etc/systemd/system/overlord-daemon.service"
-echo -e "📂 Database Path: /var/lib/overlord/overlord.db (if configured)"
 echo -e "📊 Status: sudo systemctl status overlord-daemon"
 echo -e "${NC}"
 
