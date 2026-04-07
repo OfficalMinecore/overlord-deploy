@@ -15,6 +15,13 @@ NC='\033[0m'
 echo -e "${CYAN}🛰️  Overlord Private-Link Edge Installer${NC}"
 echo -e "${BLUE}---------------------------------------${NC}"
 
+# Mandatory Check: These must be passed via -E or existing env
+if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
+    echo -e "${RED}❌ ERROR: DEPLOY_TOKEN and CONVEX_URL are required.${NC}"
+    echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy PROXMOX_URL=zzz sudo -E ./setup.sh"
+    exit 1
+fi
+
 # Check for root
 if [ "$EUID" -ne 0 ]; then 
   echo -e "${RED}❌ Please run as root (or use sudo)${NC}"
@@ -60,6 +67,13 @@ if ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
     exit 1
 fi
 
+# Download DB Reset Utility (Development Source)
+if [ -f "./reset_db.sh" ]; then
+    cp ./reset_db.sh /usr/local/bin/overlord-reset-db
+    chmod +x /usr/local/bin/overlord-reset-db
+    echo -e "🛠️  Reset utility installed from local source."
+fi
+
 # Verify binary integrity
 FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
 if [ "$FILE_SIZE" -lt 1000 ]; then
@@ -72,6 +86,12 @@ fi
 chmod +x /usr/local/bin/overlord-daemon
 echo -e "🎯 Optimized executable installed."
 
+# 4. Data Directory Setup
+echo -e "📂 Creating data directory..."
+mkdir -p /var/lib/overlord
+chown root:root /var/lib/overlord
+chmod 750 /var/lib/overlord
+
 # 4. Environment Variables & Systemd
 echo -e "⚙️  Configuring Overlord Service..."
 cat <<EOF > /etc/systemd/system/overlord-daemon.service
@@ -81,12 +101,14 @@ After=network.target
 
 [Service]
 ExecStart=/usr/local/bin/overlord-daemon
+WorkingDirectory=/var/lib/overlord
 Restart=always
 Environment=DEPLOY_TOKEN=$DEPLOY_TOKEN
 Environment=CONVEX_URL=$CONVEX_URL
 Environment=PROXMOX_URL=$PROXMOX_URL
 Environment=PROXMOX_TOKEN_ID=$PROXMOX_TOKEN_ID
 Environment=PROXMOX_TOKEN_SECRET=$PROXMOX_TOKEN_SECRET
+Environment=DB_PATH=/var/lib/overlord/overlord.db
 
 [Install]
 WantedBy=multi-user.target
@@ -123,4 +145,4 @@ echo -e "📊 Status: sudo systemctl status overlord-daemon"
 echo -e "${NC}"
 
 # Cleanup
-rm -rf "$WS_DIR"
+echo -e "${CYAN}✨ Cleanup complete.${NC}"
