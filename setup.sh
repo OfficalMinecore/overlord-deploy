@@ -100,13 +100,18 @@ chmod 750 /var/lib/overlord
 echo -e "⚙️  Configuring Overlord Service..."
 
 # Generate persistent JWT secret if not exists
+if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
+    # Harvest existing values if current ones are empty
+    [ -z "$JWT_SECRET" ] && JWT_SECRET=$(grep "JWT_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+    [ -z "$PROXMOX_URL" ] && PROXMOX_URL=$(grep "PROXMOX_URL=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+    [ -z "$PROXMOX_TOKEN_ID" ] && PROXMOX_TOKEN_ID=$(grep "PROXMOX_TOKEN_ID=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+    [ -z "$PROXMOX_TOKEN_SECRET" ] && PROXMOX_TOKEN_SECRET=$(grep "PROXMOX_TOKEN_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+    [ -z "$PROXMOX_NODE" ] && PROXMOX_NODE=$(grep "PROXMOX_NODE=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+fi
+
+# Fallback for JWT
 if [ -z "$JWT_SECRET" ]; then
-    if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
-        JWT_SECRET=$(grep "JWT_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-    fi
-    if [ -z "$JWT_SECRET" ]; then
-        JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
-    fi
+    JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
 fi
 
 cat <<EOF > /etc/systemd/system/overlord-daemon.service
