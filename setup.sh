@@ -61,8 +61,12 @@ else
 fi
 
 # 3. Secure Download & Install
-echo -e "🚚 Downloading Overlord-Daemon (Binary Release)..."
-if ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
+echo -e "🚚 Installing Overlord-Daemon..."
+
+if [ -f "./overlord-linux-amd64" ]; then
+    echo -e "${GREEN}✨ Using locally built binary (overlord-linux-amd64)${NC}"
+    cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
+elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
     echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
     exit 1
 fi
@@ -94,6 +98,17 @@ chmod 750 /var/lib/overlord
 
 # 4. Environment Variables & Systemd
 echo -e "⚙️  Configuring Overlord Service..."
+
+# Generate persistent JWT secret if not exists
+if [ -z "$JWT_SECRET" ]; then
+    if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
+        JWT_SECRET=$(grep "JWT_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
+    fi
+    if [ -z "$JWT_SECRET" ]; then
+        JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
+    fi
+fi
+
 cat <<EOF > /etc/systemd/system/overlord-daemon.service
 [Unit]
 Description=Overlord Edge Daemon
@@ -108,6 +123,8 @@ Environment=CONVEX_URL=$CONVEX_URL
 Environment=PROXMOX_URL=$PROXMOX_URL
 Environment=PROXMOX_TOKEN_ID=$PROXMOX_TOKEN_ID
 Environment=PROXMOX_TOKEN_SECRET=$PROXMOX_TOKEN_SECRET
+Environment=PROXMOX_NODE=${PROXMOX_NODE:-minecloud}
+Environment=JWT_SECRET=$JWT_SECRET
 Environment=DB_PATH=/var/lib/overlord/overlord.db
 
 [Install]
