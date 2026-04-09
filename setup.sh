@@ -4,8 +4,6 @@
 # Unified tool for Installation, Maintenance, and Decommissioning
 # Compatible with: Proxmox (Debian), Ubuntu, Debian
 
-set -e
-
 # Colors for pretty logs
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -13,6 +11,10 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+
+# Allow the script to continue even if a command fails (Interactive Mode)
+set +e
+trap '' SIGINT # Ignore SIGINT in the master loop to prevent accidental exits
 
 # Check for root
 if [ "$EUID" -ne 0 ]; then 
@@ -184,10 +186,10 @@ view_logs() {
     echo -e "${BLUE}---------------------------------------${NC}"
     echo -e "Press [Ctrl+C] to return to menu..."
     
-    # Disable exit-on-error temporarily for the live stream
-    set +e
+    # Enable SIGINT temporarily for the live stream
+    trap - SIGINT
     journalctl -u overlord-daemon -f | grep -E -i --line-buffered "$filter"
-    set -e
+    trap '' SIGINT
     
     echo -e "\n${GREEN}Returning to menu...${NC}"
     sleep 1
