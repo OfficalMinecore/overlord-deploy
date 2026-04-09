@@ -61,14 +61,25 @@ else
 fi
 
 # 3. Secure Download & Install
-echo -e "🚚 Installing Overlord-Daemon..."
+echo -e "🚚 Checking Overlord-Daemon..."
 
-if [ -f "./overlord-linux-amd64" ]; then
-    echo -e "${GREEN}✨ Using locally built binary (overlord-linux-amd64)${NC}"
-    cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
-elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
-    echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
-    exit 1
+if [ -f "/usr/local/bin/overlord-daemon" ]; then
+    echo -e "${GREEN}✨ Binary already exists at /usr/local/bin/overlord-daemon. Skipping installation.${NC}"
+else
+    if [ -f "./overlord-linux-amd64" ]; then
+        echo -e "${GREEN}✨ Using locally built binary (overlord-linux-amd64)${NC}"
+        cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
+    elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
+        echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
+        exit 1
+    fi
+
+    # Verify binary integrity (only if newly downloaded/copied)
+    FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
+    if [ "$FILE_SIZE" -lt 1000 ]; then
+        echo -e "${RED}❌ ERROR: Binary file is too small ($FILE_SIZE bytes).${NC}"
+        exit 1
+    fi
 fi
 
 # Download DB Reset Utility (Development Source)
@@ -78,17 +89,8 @@ if [ -f "./reset_db.sh" ]; then
     echo -e "🛠️  Reset utility installed from local source."
 fi
 
-# Verify binary integrity
-FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
-if [ "$FILE_SIZE" -lt 1000 ]; then
-    echo -e "${RED}❌ ERROR: Downloaded file is too small ($FILE_SIZE bytes).${NC}"
-    echo -e "${RED}It is likely a 404 page. Check if the release exists at:${NC}"
-    echo -e "${CYAN}$BINARY_URL${NC}"
-    exit 1
-fi
-
 chmod +x /usr/local/bin/overlord-daemon
-echo -e "🎯 Optimized executable installed."
+echo -e "🎯 Executable verified."
 
 # 4. Data Directory Setup
 echo -e "📂 Creating data directory..."
