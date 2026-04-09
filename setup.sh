@@ -192,16 +192,20 @@ view_logs() {
 
 # ─── MAIN MENU ──────────────────────────────────────────────────
 
-# Initialize screen
-clear
+refresh_menu=true
 while true; do
-    show_header
-    echo -e "1) Install Overlord Daemon"
-    echo -e "2) DB Maintenance"
-    echo -e "3) Self Destruct"
-    echo -e "4) View System Logs"
-    echo -e "q) Exit"
-    echo -e "${BLUE}-------------------------${NC}"
+    if [ "$refresh_menu" == "true" ]; then
+        clear
+        show_header
+        echo -e "1) Install Overlord Daemon"
+        echo -e "2) DB Maintenance"
+        echo -e "3) Self Destruct"
+        echo -e "4) View System Logs"
+        echo -e "q) Exit"
+        echo -e "${BLUE}-------------------------${NC}"
+        refresh_menu=false
+    fi
+
     get_input "Selection:" choice
 
     case $choice in
@@ -215,29 +219,26 @@ while true; do
             if [ "$inst_choice" == "a" ]; then install_daemon "full"
             elif [ "$inst_choice" == "b" ]; then install_daemon "binary"
             fi
-            clear
+            refresh_menu=true
             ;;
         2) 
-            clear
             db_maintenance 
-            clear
+            refresh_menu=true
             ;;
         3) 
-            clear
             self_destruct 
-            clear
+            refresh_menu=true
             ;;
         4) 
-            clear
             view_logs 
-            clear
+            refresh_menu=true
             ;;
         q) exit 0 ;;
-        "") ;; # Do absolutely nothing on empty Enter to prevent flicker
+        "") continue ;; # Pressing Enter now stays perfectly still
         *) 
             echo -e "${RED}Invalid selection: $choice${NC}"
             sleep 1
-            clear
+            refresh_menu=true
             ;;
     esac
 done
