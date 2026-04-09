@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# Overlord Private-Link: Automated Edge Installer
+# Overlord Management Utility
+# Unified tool for Installation, Maintenance, and Decommissioning
 # Compatible with: Proxmox (Debian), Ubuntu, Debian
 
 set -e
@@ -10,17 +11,8 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
-
-echo -e "${CYAN}🛰️  Overlord Private-Link Edge Installer${NC}"
-echo -e "${BLUE}---------------------------------------${NC}"
-
-# Mandatory Check: These must be passed via -E or existing env
-if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
-    echo -e "${RED}❌ ERROR: DEPLOY_TOKEN and CONVEX_URL are required.${NC}"
-    echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy PROXMOX_URL=zzz sudo -E ./setup.sh"
-    exit 1
-fi
 
 # Check for root
 if [ "$EUID" -ne 0 ]; then 
@@ -28,93 +20,62 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 1. Dependency Resolution
-echo -e "🔍 Checking system dependencies..."
+# ─── FUNCTIONS ──────────────────────────────────────────────────
 
-PACKAGES="curl"
-MISSING_PACKAGES=""
+show_header() {
+    clear
+    echo -e "${CYAN}🛰️  OVERLORD SYSTEM MANAGER${NC}"
+    echo -e "${BLUE}=========================${NC}"
+}
 
-for pkg in $PACKAGES; do
-    if ! command -v $pkg &> /dev/null; then
-        MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
+# --- INSTALLATION MODULE ---
+install_daemon() {
+    local mode=$1 # "full" or "binary"
+    show_header
+    echo -e "${YELLOW}📦 Mode: ${mode^^} INSTALLATION${NC}"
+    
+    if [ "$mode" == "full" ]; then
+        # 1. Env Check
+        if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
+            echo -e "${RED}❌ ERROR: Environment variables DEPLOY_TOKEN and CONVEX_URL are required for full install.${NC}"
+            echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy ./setup.sh"
+            read -p "Press enter to return..."
+            return
+        fi
+
+        # 2. Dependencies
+        echo -e "🔍 Checking system dependencies..."
+        apt-get update -y && apt-get install -y curl sqlite3
     fi
-done
 
-if [ ! -z "$MISSING_PACKAGES" ]; then
-    echo -e "📦 Installing missing packages: $MISSING_PACKAGES..."
-    apt-get update -y && apt-get install -y $MISSING_PACKAGES
-fi
+    # 3. Binary Selection
+    ARCH=$(uname -m)
+    BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+    if [ "$ARCH" == "x86_64" ]; then
+        BINARY_URL="${BASE_URL}/overlord-linux-amd64"
+    else
+        BINARY_URL="${BASE_URL}/overlord-linux-arm64"
+    fi
 
-# 2. Architecture & Binary Selection
-ARCH=$(uname -m)
-BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+    # 4. Download/Copy Binary
+    echo -e "🚚 Installing Binary..."
+    if [ -f "./overlord-linux-amd64" ]; then
+        echo -e "${GREEN}✨ Using local binary...${NC}"
+        cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
+    else
+        curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon
+    fi
+    chmod +x /usr/local/bin/overlord-daemon
 
-if [ "$ARCH" == "x86_64" ]; then
-    BINARY_URL="${BASE_URL}/overlord-linux-amd64"
-    echo -e "🖥️  Detected Architecture: x86_64 (AMD64)"
-elif [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
-    BINARY_URL="${BASE_URL}/overlord-linux-arm64"
-    echo -e "📱 Detected Architecture: arm64"
-else
-    echo -e "${RED}❌ Unsupported Architecture: ${ARCH}${NC}"
-    exit 1
-fi
-
-# 3. Secure Download & Install
-echo -e "🚚 Installing Overlord-Daemon..."
-
-if [ -f "./overlord-linux-amd64" ]; then
-    echo -e "${GREEN}✨ Using locally built binary (overlord-linux-amd64)${NC}"
-    cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
-elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
-    echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
-    exit 1
-fi
-
-# Download DB Reset Utility (Development Source)
-if [ -f "./reset_db.sh" ]; then
-    cp ./reset_db.sh /usr/local/bin/overlord-reset-db
-    chmod +x /usr/local/bin/overlord-reset-db
-    echo -e "🛠️  Reset utility installed from local source."
-fi
-
-# Verify binary integrity
-FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
-if [ "$FILE_SIZE" -lt 1000 ]; then
-    echo -e "${RED}❌ ERROR: Downloaded file is too small ($FILE_SIZE bytes).${NC}"
-    echo -e "${RED}It is likely a 404 page. Check if the release exists at:${NC}"
-    echo -e "${CYAN}$BINARY_URL${NC}"
-    exit 1
-fi
-
-chmod +x /usr/local/bin/overlord-daemon
-echo -e "🎯 Optimized executable installed."
-
-# 4. Data Directory Setup
-echo -e "📂 Creating data directory..."
-mkdir -p /var/lib/overlord
-chown root:root /var/lib/overlord
-chmod 750 /var/lib/overlord
-
-# 4. Environment Variables & Systemd
-echo -e "⚙️  Configuring Overlord Service..."
-
-# Generate persistent JWT secret if not exists
-if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
-    # Harvest existing values if current ones are empty
-    [ -z "$JWT_SECRET" ] && JWT_SECRET=$(grep "JWT_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-    [ -z "$PROXMOX_URL" ] && PROXMOX_URL=$(grep "PROXMOX_URL=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-    [ -z "$PROXMOX_TOKEN_ID" ] && PROXMOX_TOKEN_ID=$(grep "PROXMOX_TOKEN_ID=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-    [ -z "$PROXMOX_TOKEN_SECRET" ] && PROXMOX_TOKEN_SECRET=$(grep "PROXMOX_TOKEN_SECRET=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-    [ -z "$PROXMOX_NODE" ] && PROXMOX_NODE=$(grep "PROXMOX_NODE=" /etc/systemd/system/overlord-daemon.service | cut -d'=' -f3)
-fi
-
-# Fallback for JWT
-if [ -z "$JWT_SECRET" ]; then
-    JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
-fi
-
-cat <<EOF > /etc/systemd/system/overlord-daemon.service
+    if [ "$mode" == "full" ]; then
+        # 5. Service Setup
+        echo -e "⚙️  Configuring Service..."
+        mkdir -p /var/lib/overlord
+        
+        # Generation/Persistence of JWT
+        JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
+        
+        cat <<EOF > /etc/systemd/system/overlord-daemon.service
 [Unit]
 Description=Overlord Edge Daemon
 After=network.target
@@ -125,46 +86,136 @@ WorkingDirectory=/var/lib/overlord
 Restart=always
 Environment=DEPLOY_TOKEN=$DEPLOY_TOKEN
 Environment=CONVEX_URL=$CONVEX_URL
-Environment=PROXMOX_URL=$PROXMOX_URL
-Environment=PROXMOX_TOKEN_ID=$PROXMOX_TOKEN_ID
-Environment=PROXMOX_TOKEN_SECRET=$PROXMOX_TOKEN_SECRET
-Environment=PROXMOX_NODE=${PROXMOX_NODE:-minecloud}
 Environment=JWT_SECRET=$JWT_SECRET
 Environment=DB_PATH=/var/lib/overlord/overlord.db
 
 [Install]
 WantedBy=multi-user.target
 EOF
+        systemctl daemon-reload
+        systemctl enable overlord-daemon
+    fi
 
-# 6. Service Management
-echo -e "🚀 Starting Overlord Service..."
-systemctl stop overlord-daemon || true
-systemctl daemon-reload
-systemctl enable overlord-daemon
-systemctl start overlord-daemon
+    # 6. Start
+    echo -e "🚀 Starting Overlord..."
+    systemctl restart overlord-daemon
+    echo -e "${GREEN}✅ Done!${NC}"
+    sleep 2
+}
 
-# 7. Verification
-echo -e "🔍 Verifying binary execution..."
-sleep 2
+# --- DB MAINTENANCE MODULE ---
+db_maintenance() {
+    show_header
+    echo -e "${YELLOW}💾 DB MAINTENANCE${NC}"
+    echo -e "1) Reinstall DB (Wipe and Refresh)"
+    echo -e "2) Delete Everything Related to DB"
+    echo -e "b) Back"
+    read -p "Selection: " db_opt
 
-if systemctl is-active --quiet overlord-daemon; then
-    echo -e "${GREEN}✅ DAEMON IS RUNNING!${NC}"
-    echo -e "📄 Last 5 logs:"
-    journalctl -u overlord-daemon -n 5 --no-pager
-else
-    echo -e "${RED}❌ DAEMON FAILED TO START!${NC}"
-    echo -e "⚠️  Check logs: journalctl -u overlord-daemon -n 20"
-    exit 1
-fi
+    case $db_opt in
+        1)
+            echo -e "${YELLOW}🔄 Reinstalling DB...${NC}"
+            systemctl stop overlord-daemon || true
+            rm -f /var/lib/overlord/overlord.db*
+            systemctl start overlord-daemon
+            echo -e "${GREEN}✅ Database reset complete.${NC}"
+            ;;
+        2)
+            echo -e "${RED}⚠️  Deleting ALL database files...${NC}"
+            systemctl stop overlord-daemon || true
+            rm -rf /var/lib/overlord/*.db*
+            echo -e "${GREEN}✅ All database files removed.${NC}"
+            ;;
+        *) return ;;
+    esac
+    read -p "Press enter to return..."
+}
 
-echo -e "${BLUE}---------------------------------------${NC}"
-echo -e "${GREEN}✅ INSTALLATION COMPLETE!${NC}"
-echo -e "🖥️  ${CYAN}Local Dashboard:${NC} http://$(hostname -I | awk '{print $1}'):3000"
-echo -e "🛰️  Private-Link API: http://$(hostname -I | awk '{print $1}'):8080"
-echo -e "📂 Binary Path: /usr/local/bin/overlord-daemon"
-echo -e "📂 Service Path: /etc/systemd/system/overlord-daemon.service"
-echo -e "📊 Status: sudo systemctl status overlord-daemon"
-echo -e "${NC}"
+# --- SELF DESTRUCT MODULE ---
+self_destruct() {
+    show_header
+    echo -e "${RED}☢️ SELF DESTRUCT MENU${NC}"
+    echo -e "1) Instant Self Destruct"
+    echo -e "2) Timed Self Destruct"
+    echo -e "b) Back"
+    read -p "Selection: " sd_opt
 
-# Cleanup
-echo -e "${CYAN}✨ Cleanup complete.${NC}"
+    if [ "$sd_opt" == "2" ]; then
+        read -p "Enter delay in seconds: " delay
+        echo -e "${YELLOW}⏳ Self-destruct armed. T-minus $delay seconds...${NC}"
+        sleep $delay
+    elif [ "$sd_opt" != "1" ]; then
+        return
+    fi
+
+    echo -e "${RED}🔥 DESTROYING OVERLORD...${NC}"
+    systemctl stop overlord-daemon || true
+    systemctl disable overlord-daemon || true
+    rm -f /etc/systemd/system/overlord-daemon.service
+    rm -f /usr/local/bin/overlord-daemon
+    rm -rf /var/lib/overlord
+    systemctl daemon-reload
+    echo -e "${GREEN}💀 Overlord has been purged from this system.${NC}"
+    exit 0
+}
+
+# --- LOGS MODULE ---
+view_logs() {
+    show_header
+    echo -e "${YELLOW}📜 LOG VIEWER SELECTION${NC}"
+    echo -e "1) DB Logs (Database operations)"
+    echo -e "2) Web Service Logs (API & Traffic)"
+    echo -e "3) Overlord Logs (Detailed combined view)"
+    echo -e "b) Back"
+    read -p "Selection: " log_opt
+
+    local filter=""
+    case $log_opt in
+        1) filter="DB|SQLite|ips|attack_logs" ;;
+        2) filter="GIN|API|listening|http" ;;
+        3) filter="." ;; # Show everything
+        *) return ;;
+    esac
+
+    show_header
+    echo -e "${YELLOW}📜 VIEWING: ${filter}${NC}"
+    echo -e "${BLUE}---------------------------------------${NC}"
+    journalctl -u overlord-daemon -n 100 --no-pager | grep -E -i "$filter" | tail -n 50
+    echo -e "${BLUE}---------------------------------------${NC}"
+    echo -e "Press [Ctrl+C] to stop live monitoring..."
+    
+    # Live view with grep filter
+    journalctl -u overlord-daemon -f | grep -E -i --line-buffered "$filter"
+    
+    read -p "Press enter to return..."
+}
+
+# ─── MAIN MENU ──────────────────────────────────────────────────
+
+while true; do
+    show_header
+    echo -e "1) Install Overlord Daemon"
+    echo -e "2) DB Maintenance"
+    echo -e "3) Self Destruct"
+    echo -e "4) View System Logs"
+    echo -e "q) Exit"
+    echo -e "${BLUE}-------------------------${NC}"
+    read -p "Selection: " choice
+
+    case $choice in
+        1)
+            show_header
+            echo -e "a) Detailed Installation (Full)"
+            echo -e "b) Only Binary Installation (Update)"
+            echo -e "back) Go Back"
+            read -p "Mode: " inst_choice
+            if [ "$inst_choice" == "a" ]; then install_daemon "full"; 
+            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"; fi
+            ;;
+        2) db_maintenance ;;
+        3) self_destruct ;;
+        4) view_logs ;;
+        q) exit 0 ;;
+        *) echo -e "${RED}Invalid selection${NC}"; sleep 1 ;;
+    esac
+done
