@@ -12,23 +12,24 @@ CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Security & Environment
+## Security & Environment
 export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 set +e
-trap '' SIGINT 
 
-# Check for root
-if [ "$EUID" -ne 0 ]; then 
-  echo -e "${RED}❌ Please run as root (or use sudo)${NC}"
-  exit 1
-fi
-
-# ─── FUNCTIONS ──────────────────────────────────────────────────
+# --- FUNCTIONS ──────────────────────────────────────────────────
 
 show_header() {
     clear
     echo -e "${CYAN}🛰️  OVERLORD SYSTEM MANAGER${NC}"
     echo -e "${BLUE}=========================${NC}"
+}
+
+# Helper for robust input
+get_input() {
+    local prompt=$1
+    local var_name=$2
+    printf "${YELLOW}${prompt}${NC} "
+    read -r "$var_name"
 }
 
 install_daemon() {
@@ -40,7 +41,7 @@ install_daemon() {
         if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
             echo -e "${RED}❌ ERROR: Environment variables DEPLOY_TOKEN and CONVEX_URL are required.${NC}"
             echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy $0"
-            read -p "Press enter to return..."
+            get_input "Press enter to return..." dummy
             return
         fi
 
@@ -60,7 +61,6 @@ install_daemon() {
     BINARY_URL="${BASE_URL}/${BINARY_NAME}"
 
     echo -e "🚚 Installing Binary..."
-    # Check if the specific arch binary exists locally first
     if [ -f "./${BINARY_NAME}" ]; then
         echo -e "${GREEN}✨ Using local binary: ${BINARY_NAME}${NC}"
         cp "./${BINARY_NAME}" /usr/local/bin/overlord-daemon
@@ -75,7 +75,6 @@ install_daemon() {
         echo -e "⚙️  Configuring Service..."
         mkdir -p /var/lib/overlord
         
-        # Generate JWT Secret if not exists
         JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
         
         cat <<EOF > /etc/systemd/system/overlord-daemon.service
@@ -99,7 +98,6 @@ EOF
         systemctl enable overlord-daemon
     fi
 
-    # Only restart if the service file exists
     if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
         echo -e "🚀 Starting Overlord..."
         systemctl restart overlord-daemon
@@ -116,7 +114,7 @@ db_maintenance() {
     echo -e "1) Reinstall DB (Wipe and Refresh)"
     echo -e "2) Delete Everything Related to DB"
     echo -e "b) Back"
-    read -p "Selection: " db_opt
+    get_input "Selection:" db_opt
 
     case $db_opt in
         1)
@@ -132,7 +130,7 @@ db_maintenance() {
             ;;
         *) return ;;
     esac
-    read -p "Press enter to return..."
+    get_input "Press enter to return..." dummy
 }
 
 self_destruct() {
@@ -141,10 +139,10 @@ self_destruct() {
     echo -e "1) Instant Self Destruct"
     echo -e "2) Timed Self Destruct"
     echo -e "b) Back"
-    read -p "Selection: " sd_opt
+    get_input "Selection:" sd_opt
 
     if [ "$sd_opt" == "2" ]; then
-        read -p "Enter delay in seconds: " delay
+        get_input "Enter delay in seconds:" delay
         [[ $delay =~ ^[0-9]+$ ]] || { echo "Invalid number"; sleep 1; return; }
         echo -e "${YELLOW}⏳ Self-destruct armed. T-minus $delay seconds...${NC}"
         sleep $delay
@@ -152,14 +150,14 @@ self_destruct() {
         return
     fi
 
-    echo -e "${RED}🔥 DESTROYING OVERLORD...${NC}"
+    echo -e "${RED}🔥🔥 DESTROYING SYSTEM...${NC}"
     systemctl stop overlord-daemon 2>/dev/null
     systemctl disable overlord-daemon 2>/dev/null
     rm -f /etc/systemd/system/overlord-daemon.service
     rm -f /usr/local/bin/overlord-daemon
     rm -rf /var/lib/overlord
     systemctl daemon-reload
-    echo -e "${GREEN}💀 Overlord has been purged.${NC}"
+    echo -e "${GREEN}💀 Purge complete.${NC}"
     exit 0
 }
 
@@ -170,7 +168,7 @@ view_logs() {
     echo -e "2) Web Service Logs"
     echo -e "3) All Logs"
     echo -e "b) Back"
-    read -p "Selection: " log_opt
+    get_input "Selection:" log_opt
 
     local filter=""
     case $log_opt in
@@ -182,11 +180,12 @@ view_logs() {
 
     show_header
     echo -e "${YELLOW}📜 VIEWING: ${filter}${NC}"
-    echo -e "Press [Ctrl+C] to stop viewing logs and return to menu."
+    echo -e "Press [Ctrl+C] once to stop viewing logs and return to menu."
     echo -e "${BLUE}---------------------------------------${NC}"
     
-    # Temporarily restore SIGINT handling for the journalctl process
-    ( trap 'exit' SIGINT; journalctl -u overlord-daemon -f -n 50 | grep -E -i --line-buffered "$filter" )
+    # Run log viewer in foreground. Ctrl+C will kill journalctl but continue the script
+    # because we are NOT calling set -e.
+    journalctl -u overlord-daemon -f -n 50 | grep -E -i --line-buffered "$filter"
     
     echo -e "\n${GREEN}Returning to menu...${NC}"
     sleep 1
@@ -202,7 +201,7 @@ while true; do
     echo -e "4) View System Logs"
     echo -e "q) Exit"
     echo -e "${BLUE}-------------------------${NC}"
-    read -p "Selection: " choice
+    get_input "Selection:" choice
 
     case $choice in
         1)
@@ -210,8 +209,18 @@ while true; do
             echo -e "a) Detailed Installation (Full)"
             echo -e "b) Only Binary Installation (Update)"
             echo -e "back) Go Back"
-            read -p "Mode: " inst_choice
+            get_input "Mode:" inst_choice
             if [ "$inst_choice" == "a" ]; then install_daemon "full"; 
+            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"; fi
+            ;;
+        2) db_maintenance ;;
+        3) self_destruct ;;
+        4) view_logs ;;
+        q) exit 0 ;;
+        *) [ -n "$choice" ] && echo -e "${RED}Invalid selection: $choice${NC}" && sleep 1 ;;
+    esac
+done
+"; 
             elif [ "$inst_choice" == "b" ]; then install_daemon "binary"; fi
             ;;
         2) db_maintenance ;;
