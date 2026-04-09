@@ -210,8 +210,9 @@ while true; do
             echo -e "b) Only Binary Installation (Update)"
             echo -e "back) Go Back"
             get_input "Mode:" inst_choice
-            if [ "$inst_choice" == "a" ]; then install_daemon "full"; 
-            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"; fi
+            if [ "$inst_choice" == "a" ]; then install_daemon "full"
+            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"
+            fi
             ;;
         2) db_maintenance ;;
         3) self_destruct ;;
@@ -219,15 +220,5 @@ while true; do
         q) exit 0 ;;
         "") continue ;; # Handle empty Enter key
         *) echo -e "${RED}Invalid selection: $choice${NC}"; sleep 1 ;;
-    esac
-done
-"; 
-            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"; fi
-            ;;
-        2) db_maintenance ;;
-        3) self_destruct ;;
-        4) view_logs ;;
-        q) exit 0 ;;
-        *) echo -e "${RED}Invalid selection${NC}"; sleep 1 ;;
     esac
 done
