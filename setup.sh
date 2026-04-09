@@ -19,7 +19,6 @@ set +e
 # --- FUNCTIONS ──────────────────────────────────────────────────
 
 show_header() {
-    clear
     echo -e "${CYAN}🛰️  OVERLORD SYSTEM MANAGER${NC}"
     echo -e "${BLUE}=========================${NC}"
 }
@@ -193,6 +192,8 @@ view_logs() {
 
 # ─── MAIN MENU ──────────────────────────────────────────────────
 
+# Initialize screen
+clear
 while true; do
     show_header
     echo -e "1) Install Overlord Daemon"
@@ -205,6 +206,7 @@ while true; do
 
     case $choice in
         1)
+            clear
             show_header
             echo -e "a) Detailed Installation (Full)"
             echo -e "b) Only Binary Installation (Update)"
@@ -213,12 +215,29 @@ while true; do
             if [ "$inst_choice" == "a" ]; then install_daemon "full"
             elif [ "$inst_choice" == "b" ]; then install_daemon "binary"
             fi
+            clear
             ;;
-        2) db_maintenance ;;
-        3) self_destruct ;;
-        4) view_logs ;;
+        2) 
+            clear
+            db_maintenance 
+            clear
+            ;;
+        3) 
+            clear
+            self_destruct 
+            clear
+            ;;
+        4) 
+            clear
+            view_logs 
+            clear
+            ;;
         q) exit 0 ;;
-        "") continue ;; # Handle empty Enter key
-        *) echo -e "${RED}Invalid selection: $choice${NC}"; sleep 1 ;;
+        "") ;; # Do absolutely nothing on empty Enter to prevent flicker
+        *) 
+            echo -e "${RED}Invalid selection: $choice${NC}"
+            sleep 1
+            clear
+            ;;
     esac
 done
