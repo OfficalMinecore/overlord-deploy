@@ -61,7 +61,7 @@ else
 fi
 
 # 3. Secure Download & Install
-echo -e "🚚 Checking Overlord-Daemon..."
+echo -e "🚚 ARCHIVE CHECK: Looking for existing daemon bin..."
 
 if [ -f "/usr/local/bin/overlord-daemon" ]; then
     echo -e "${GREEN}✨ Binary already exists at /usr/local/bin/overlord-daemon. Skipping installation.${NC}"
