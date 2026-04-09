@@ -217,7 +217,8 @@ while true; do
         3) self_destruct ;;
         4) view_logs ;;
         q) exit 0 ;;
-        *) [ -n "$choice" ] && echo -e "${RED}Invalid selection: $choice${NC}" && sleep 1 ;;
+        "") continue ;; # Handle empty Enter key
+        *) echo -e "${RED}Invalid selection: $choice${NC}"; sleep 1 ;;
     esac
 done
 "; 
