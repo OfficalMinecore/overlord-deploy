@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Overlord Management Utility
-# Unified tool for Installation, Maintenance, and Decommissioning
+# Overlord Management Utility - Refactored Version
 # Compatible with: Proxmox (Debian), Ubuntu, Debian
 
-# Colors for pretty logs
+# ─── CONFIGURATION & UI ──────────────────────────────────────────
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -12,18 +12,20 @@ CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-## Security & Environment
-export PATH=$PATH:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Ensure the script doesn't exit on minor command failures
 set +e
 
-# --- FUNCTIONS ──────────────────────────────────────────────────
+# Global Trap: Ignore Ctrl+C in the main menu to prevent accidental exits
+trap '' SIGINT
+
+# ─── CORE FUNCTIONS ──────────────────────────────────────────────
 
 show_header() {
+    clear
     echo -e "${CYAN}🛰️  OVERLORD SYSTEM MANAGER${NC}"
-    echo -e "${BLUE}=========================${NC}"
+    echo -e "${BLUE}=========================================${NC}"
 }
 
-# Helper for robust input
 get_input() {
     local prompt=$1
     local var_name=$2
@@ -31,50 +33,50 @@ get_input() {
     read -r "$var_name"
 }
 
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${RED}❌ This script must be run as root.${NC}"
+        exit 1
+    fi
+}
+
+# ─── SERVICE MODULES ─────────────────────────────────────────────
+
 install_daemon() {
     local mode=$1 
     show_header
     echo -e "${YELLOW}📦 Mode: ${mode^^} INSTALLATION${NC}"
     
-    if [ "$mode" == "full" ]; then
-        if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
-            echo -e "${RED}❌ ERROR: Environment variables DEPLOY_TOKEN and CONVEX_URL are required.${NC}"
-            echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy $0"
-            get_input "Press enter to return..." dummy
+    # Validation for Full Install
+    if [[ "$mode" == "full" ]]; then
+        if [[ -z "$DEPLOY_TOKEN" || -z "$CONVEX_URL" ]]; then
+            echo -e "${RED}❌ ERROR: Environment variables missing.${NC}"
+            echo -e "Usage: DEPLOY_TOKEN=xx CONVEX_URL=yy $0"
+            get_input "Press Enter to return..." dummy
             return
         fi
-
-        echo -e "🔍 Checking system dependencies..."
-        apt-get update -y && apt-get install -y curl sqlite3
+        echo -e "🔍 Installing system dependencies..."
+        apt-get update -qq && apt-get install -y curl sqlite3 >/dev/null 2>&1
     fi
 
-    # Binary Selection
-    ARCH=$(uname -m)
-    BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+    # Architecture Detection
+    local ARCH=$(uname -m)
+    local BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+    local BINARY_NAME=$([[ "$ARCH" == "x86_64" ]] && echo "overlord-linux-amd64" || echo "overlord-linux-arm64")
     
-    if [ "$ARCH" == "x86_64" ]; then
-        BINARY_NAME="overlord-linux-amd64"
+    echo -e "🚚 Deploying Binary..."
+    if [[ -f "./$BINARY_NAME" ]]; then
+        cp "./$BINARY_NAME" /usr/local/bin/overlord-daemon
     else
-        BINARY_NAME="overlord-linux-arm64"
+        curl -fsSL "${BASE_URL}/${BINARY_NAME}" -o /usr/local/bin/overlord-daemon
     fi
-    BINARY_URL="${BASE_URL}/${BINARY_NAME}"
-
-    echo -e "🚚 Installing Binary..."
-    if [ -f "./${BINARY_NAME}" ]; then
-        echo -e "${GREEN}✨ Using local binary: ${BINARY_NAME}${NC}"
-        cp "./${BINARY_NAME}" /usr/local/bin/overlord-daemon
-    else
-        echo -e "🌐 Downloading from GitHub..."
-        curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon
-    fi
-    
     chmod +x /usr/local/bin/overlord-daemon
 
-    if [ "$mode" == "full" ]; then
-        echo -e "⚙️  Configuring Service..."
+    # Systemd Configuration
+    if [[ "$mode" == "full" ]]; then
+        echo -e "⚙️  Generating Systemd Service..."
         mkdir -p /var/lib/overlord
-        
-        JWT_SECRET=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)
+        local JWT_SECRET=$(tr -dc A-Za-z0-9 < /dev/urandom | head -c 64)
         
         cat <<EOF > /etc/systemd/system/overlord-daemon.service
 [Unit]
@@ -94,78 +96,79 @@ Environment=DB_PATH=/var/lib/overlord/overlord.db
 WantedBy=multi-user.target
 EOF
         systemctl daemon-reload
-        systemctl enable overlord-daemon
+        systemctl enable overlord-daemon >/dev/null 2>&1
     fi
 
-    if [ -f "/etc/systemd/system/overlord-daemon.service" ]; then
-        echo -e "🚀 Starting Overlord..."
+    # Post-Install Start
+    if [[ -f "/etc/systemd/system/overlord-daemon.service" ]]; then
+        echo -e "🚀 Launching Overlord..."
         systemctl restart overlord-daemon
-        echo -e "${GREEN}✅ Done!${NC}"
+        echo -e "${GREEN}✅ Success!${NC}"
     else
-        echo -e "${YELLOW}⚠️ Binary updated, but no service found. Run Full Install to activate.${NC}"
+        echo -e "${YELLOW}⚠️ Binary placed. No service file found to start.${NC}"
     fi
-    sleep 2
+    sleep 1.5
 }
 
 db_maintenance() {
     show_header
     echo -e "${YELLOW}💾 DB MAINTENANCE${NC}"
-    echo -e "1) Reinstall DB (Wipe and Refresh)"
-    echo -e "2) Delete Everything Related to DB"
+    echo -e "1) Reset DB (Wipe & Restart Service)"
+    echo -e "2) Total Purge (Delete all DB files)"
     echo -e "b) Back"
     get_input "Selection:" db_opt
 
     case $db_opt in
         1)
-            systemctl stop overlord-daemon 2>/dev/null
+            systemctl stop overlord-daemon
             rm -f /var/lib/overlord/overlord.db*
-            systemctl start overlord-daemon 2>/dev/null
-            echo -e "${GREEN}✅ Database reset complete.${NC}"
+            systemctl start overlord-daemon
+            echo -e "${GREEN}✅ Database has been reset.${NC}"
             ;;
         2)
-            systemctl stop overlord-daemon 2>/dev/null
+            systemctl stop overlord-daemon
             rm -rf /var/lib/overlord/*.db*
-            echo -e "${GREEN}✅ All database files removed.${NC}"
+            echo -e "${GREEN}✅ All database traces removed.${NC}"
             ;;
         *) return ;;
     esac
-    get_input "Press enter to return..." dummy
+    get_input "Press Enter to return..." dummy
 }
 
 self_destruct() {
     show_header
-    echo -e "${RED}☢️ SELF DESTRUCT MENU${NC}"
-    echo -e "1) Instant Self Destruct"
-    echo -e "2) Timed Self Destruct"
+    echo -e "${RED}☢️  SELF DESTRUCT SYSTEM${NC}"
+    echo -e "1) Instant Purge"
+    echo -e "2) Timed Purge"
     echo -e "b) Back"
     get_input "Selection:" sd_opt
 
-    if [ "$sd_opt" == "2" ]; then
-        get_input "Enter delay in seconds:" delay
+    if [[ "$sd_opt" == "2" ]]; then
+        get_input "Enter delay (seconds):" delay
         [[ $delay =~ ^[0-9]+$ ]] || { echo "Invalid number"; sleep 1; return; }
-        echo -e "${YELLOW}⏳ Self-destruct armed. T-minus $delay seconds...${NC}"
-        sleep $delay
-    elif [ "$sd_opt" != "1" ]; then
+        echo -e "${YELLOW}⏳ Armed. T-minus $delay seconds...${NC}"
+        sleep "$delay"
+    elif [[ "$sd_opt" != "1" ]]; then
         return
     fi
 
-    echo -e "${RED}🔥🔥 DESTROYING SYSTEM...${NC}"
-    systemctl stop overlord-daemon 2>/dev/null
-    systemctl disable overlord-daemon 2>/dev/null
+    echo -e "${RED}🔥 PURGING OVERLORD FROM DISK...${NC}"
+    systemctl stop overlord-daemon >/dev/null 2>&1
+    systemctl disable overlord-daemon >/dev/null 2>&1
     rm -f /etc/systemd/system/overlord-daemon.service
     rm -f /usr/local/bin/overlord-daemon
     rm -rf /var/lib/overlord
     systemctl daemon-reload
-    echo -e "${GREEN}💀 Purge complete.${NC}"
+    echo -e "${GREEN}💀 System purged. Goodbye.${NC}"
     exit 0
 }
 
 view_logs() {
     show_header
-    echo -e "${YELLOW}📜 LOG VIEWER SELECTION${NC}"
-    echo -e "1) DB Logs"
-    echo -e "2) Web Service Logs"
-    echo -e "3) All Logs"
+    echo -e "${YELLOW}📜 SELECT LOG CATEGORY${NC}"
+    echo -e "1) Database Logs"
+    echo -e "2) Web/API Traffic"
+    echo -e "3) Full Debug Stream"
     echo -e "b) Back"
     get_input "Selection:" log_opt
 
@@ -178,67 +181,43 @@ view_logs() {
     esac
 
     show_header
-    echo -e "${YELLOW}📜 VIEWING: ${filter}${NC}"
-    echo -e "Press [Ctrl+C] once to stop viewing logs and return to menu."
-    echo -e "${BLUE}---------------------------------------${NC}"
+    echo -e "${YELLOW}Streaming Logs (Ctrl+C to Stop)${NC}"
+    echo -e "${BLUE}-----------------------------------------${NC}"
     
-    # Run log viewer in foreground. Ctrl+C will kill journalctl but continue the script
-    # because we are NOT calling set -e.
-    journalctl -u overlord-daemon -f -n 50 | grep -E -i --line-buffered "$filter"
+    # Temporarily restore SIGINT for the journalctl process only
+    ( trap 'exit 0' SIGINT; journalctl -u overlord-daemon -f -n 50 | grep -E -i --line-buffered "$filter" )
     
     echo -e "\n${GREEN}Returning to menu...${NC}"
     sleep 1
 }
 
-# ─── MAIN MENU ──────────────────────────────────────────────────
+# ─── MAIN PROGRAM LOOP ───────────────────────────────────────────
 
-refresh_menu=true
+check_root
+
 while true; do
-    if [ "$refresh_menu" == "true" ]; then
-        clear
-        show_header
-        echo -e "1) Install Overlord Daemon"
-        echo -e "2) DB Maintenance"
-        echo -e "3) Self Destruct"
-        echo -e "4) View System Logs"
-        echo -e "q) Exit"
-        echo -e "${BLUE}-------------------------${NC}"
-        refresh_menu=false
-    fi
-
+    show_header
+    echo -e "1) Install/Update Overlord"
+    echo -e "2) Database Maintenance"
+    echo -e "3) Self Destruct"
+    echo -e "4) View Logs"
+    echo -e "q) Exit Utility"
+    echo -e "${BLUE}-----------------------------------------${NC}"
     get_input "Selection:" choice
 
     case $choice in
         1)
-            clear
             show_header
-            echo -e "a) Detailed Installation (Full)"
-            echo -e "b) Only Binary Installation (Update)"
-            echo -e "back) Go Back"
+            echo -e "a) Full Installation (Fresh)"
+            echo -e "b) Binary Only (Update)"
             get_input "Mode:" inst_choice
-            if [ "$inst_choice" == "a" ]; then install_daemon "full"
-            elif [ "$inst_choice" == "b" ]; then install_daemon "binary"
-            fi
-            refresh_menu=true
+            if [[ "$inst_choice" == "a" ]]; then install_daemon "full"; fi
+            if [[ "$inst_choice" == "b" ]]; then install_daemon "binary"; fi
             ;;
-        2) 
-            db_maintenance 
-            refresh_menu=true
-            ;;
-        3) 
-            self_destruct 
-            refresh_menu=true
-            ;;
-        4) 
-            view_logs 
-            refresh_menu=true
-            ;;
-        q) exit 0 ;;
-        "") continue ;; # Pressing Enter now stays perfectly still
-        *) 
-            echo -e "${RED}Invalid selection: $choice${NC}"
-            sleep 1
-            refresh_menu=true
-            ;;
+        2) db_maintenance ;;
+        3) self_destruct ;;
+        4) view_logs ;;
+        q|Q) clear; exit 0 ;;
+        *) continue ;;
     esac
 done
