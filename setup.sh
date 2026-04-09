@@ -180,14 +180,17 @@ view_logs() {
     show_header
     echo -e "${YELLOW}📜 VIEWING: ${filter}${NC}"
     echo -e "${BLUE}---------------------------------------${NC}"
-    journalctl -u overlord-daemon -n 100 --no-pager | grep -E -i "$filter" | tail -n 50
+    journalctl -u overlord-daemon -n 100 --no-pager | grep -E -i "$filter" | tail -n 50 || true
     echo -e "${BLUE}---------------------------------------${NC}"
-    echo -e "Press [Ctrl+C] to stop live monitoring..."
+    echo -e "Press [Ctrl+C] to return to menu..."
     
-    # Live view with grep filter
+    # Disable exit-on-error temporarily for the live stream
+    set +e
     journalctl -u overlord-daemon -f | grep -E -i --line-buffered "$filter"
+    set -e
     
-    read -p "Press enter to return..."
+    echo -e "\n${GREEN}Returning to menu...${NC}"
+    sleep 1
 }
 
 # ─── MAIN MENU ──────────────────────────────────────────────────
