@@ -108,8 +108,8 @@ if [ "$INSTALL_NEEDED" = true ]; then
     elif [ -f "./$EXPECTED_NAME" ]; then
         echo -e "${GREEN}✨ Using locally staged binary ($EXPECTED_NAME)${NC}"
         cp "./$EXPECTED_NAME" /usr/local/bin/overlord-daemon
-    elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
-        echo -e "${BLUE}🔄 Download failed (asset likely missing on GitHub).${NC}"
+    elif ! curl -SfL "$BINARY_URL" -o /usr/local/bin/overlord-daemon || [ $(stat -c%s "/usr/local/bin/overlord-daemon") -lt 1000 ]; then
+        echo -e "${BLUE}🔄 Download failed or asset missing (Size check failed).${NC}"
         
         # Fallback: Build from source if we are in a repo and Go is installed
         if command -v go &> /dev/null && [ -f "Makefile" ]; then
