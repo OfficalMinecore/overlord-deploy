@@ -64,7 +64,7 @@ else
 fi
 
 # 3. Binary Selection & Matching
-BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.1.0"
+BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
 if [ "$ARCH" == "x86_64" ]; then
     BINARY_URL="${BASE_URL}/overlord-${FLAVOR}-amd64"
     EXPECTED_NAME="overlord-${FLAVOR}-amd64"
