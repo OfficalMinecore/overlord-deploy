@@ -109,14 +109,30 @@ if [ "$INSTALL_NEEDED" = true ]; then
         echo -e "${GREEN}✨ Using locally staged binary ($EXPECTED_NAME)${NC}"
         cp "./$EXPECTED_NAME" /usr/local/bin/overlord-daemon
     elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
-        echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
-        exit 1
+        echo -e "${BLUE}🔄 Download failed (asset likely missing on GitHub).${NC}"
+        
+        # Fallback: Build from source if we are in a repo and Go is installed
+        if command -v go &> /dev/null && [ -f "Makefile" ]; then
+            echo -e "🛠️  Attempting to build ${FLAVOR} flavor from source..."
+            if make build-${FLAVOR}; then
+                cp "overlord-${FLAVOR}" /usr/local/bin/overlord-daemon
+                echo -e "${GREEN}✅ Successfully built from source!${NC}"
+            else
+                echo -e "${RED}❌ Build failed.${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}❌ Download failed and no local source/Go compiler found.${NC}"
+            echo -e "💡 TIP: Please upload your binaries to the GitHub Release v1.1.0 first."
+            exit 1
+        fi
     fi
 
     # Verify binary integrity
     FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
     if [ "$FILE_SIZE" -lt 1000 ]; then
-        echo -e "${RED}❌ ERROR: Binary file is too small ($FILE_SIZE bytes).${NC}"
+        echo -e "${RED}❌ ERROR: Binary file is too small ($FILE_SIZE bytes). GitHub returned a 404 or file is corrupt.${NC}"
+        echo -e "💡 TIP: Check if you have uploaded the assets to your GitHub Release v1.1.0."
         exit 1
     fi
     chmod +x /usr/local/bin/overlord-daemon
