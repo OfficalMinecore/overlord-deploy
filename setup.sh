@@ -16,9 +16,14 @@ echo -e "${CYAN}🛰️  Overlord Private-Link Edge Installer${NC}"
 echo -e "${BLUE}---------------------------------------${NC}"
 
 # Mandatory Check: These must be passed via -E or existing env
-if [ -z "$DEPLOY_TOKEN" ] || [ -z "$CONVEX_URL" ]; then
-    echo -e "${RED}❌ ERROR: DEPLOY_TOKEN and CONVEX_URL are required.${NC}"
-    echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy PROXMOX_URL=zzz sudo -E ./setup.sh"
+if [ -z "$DEPLOY_TOKEN" ]; then
+    echo -e "${RED}❌ ERROR: DEPLOY_TOKEN is missing.${NC}"
+    echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy sudo -E ./setup.sh"
+    exit 1
+fi
+if [ -z "$CONVEX_URL" ]; then
+    echo -e "${RED}❌ ERROR: CONVEX_URL is missing.${NC}"
+    echo -e "Usage: DEPLOY_TOKEN=xxx CONVEX_URL=yyy sudo -E ./setup.sh"
     exit 1
 fi
 
