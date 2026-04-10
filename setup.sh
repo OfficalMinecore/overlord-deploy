@@ -50,41 +50,76 @@ if [ ! -z "$MISSING_PACKAGES" ]; then
     apt-get update -y && apt-get install -y $MISSING_PACKAGES
 fi
 
-# 2. Architecture & Binary Selection
+# 2. Architecture & Flavor Selection
 ARCH=$(uname -m)
-BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+IS_PVE=false
+[ -d "/etc/pve" ] && IS_PVE=true
 
+if [ "$IS_PVE" = true ]; then
+    FLAVOR="proxmox"
+    echo -e "🛰️  Detected Environment: ${CYAN}Proxmox Hypervisor${NC}"
+else
+    FLAVOR="host"
+    echo -e "🖥️  Detected Environment: ${CYAN}Standard Host / VM${NC}"
+fi
+
+# 3. Binary Selection & Matching
+BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.1.0"
 if [ "$ARCH" == "x86_64" ]; then
-    BINARY_URL="${BASE_URL}/overlord-linux-amd64"
-    echo -e "🖥️  Detected Architecture: x86_64 (AMD64)"
+    BINARY_URL="${BASE_URL}/overlord-${FLAVOR}-amd64"
+    EXPECTED_NAME="overlord-${FLAVOR}-amd64"
 elif [ "$ARCH" == "aarch64" ] || [ "$ARCH" == "arm64" ]; then
-    BINARY_URL="${BASE_URL}/overlord-linux-arm64"
-    echo -e "📱 Detected Architecture: arm64"
+    BINARY_URL="${BASE_URL}/overlord-${FLAVOR}-arm64"
+    EXPECTED_NAME="overlord-${FLAVOR}-arm64"
 else
     echo -e "${RED}❌ Unsupported Architecture: ${ARCH}${NC}"
     exit 1
 fi
 
-# 3. Secure Download & Install
-echo -e "🚚 ARCHIVE CHECK: Looking for existing daemon bin..."
+echo -e "⚙️  Target Binary: ${EXPECTED_NAME}"
+
+# 4. Secure Download & Install
+INSTALL_NEEDED=true
 
 if [ -f "/usr/local/bin/overlord-daemon" ]; then
-    echo -e "${GREEN}✨ Binary already exists at /usr/local/bin/overlord-daemon. Skipping installation.${NC}"
-else
-    if [ -f "./overlord-linux-amd64" ]; then
-        echo -e "${GREEN}✨ Using locally built binary (overlord-linux-amd64)${NC}"
-        cp ./overlord-linux-amd64 /usr/local/bin/overlord-daemon
+    # Try to verify the flavor of the existing binary
+    # We use a simple check for a 'proxmox' string in the binary as a heuristic
+    # or just trust the user if they're running setup again.
+    # For now, let's see if we should force a specialized flavor check.
+    echo -e "🔍 Existing binary found. Checking for flavor match..."
+    
+    # We can skip if the user just wants to update config, 
+    # but if the environment is PVE and the binary was built for HOST, we MUST update.
+    # For simplicity, we compare a hidden flavor-stamp if available, 
+    # but here we'll just check if the user wants to FORCE flavor alignment.
+    if /usr/local/bin/overlord-daemon --version 2>&1 | grep -qi "$FLAVOR"; then
+        echo -e "${GREEN}✨ Existing binary matches the system flavor ($FLAVOR). Skipping download.${NC}"
+        INSTALL_NEEDED=false
+    else
+        echo -e "${BLUE}🔄 Flavor mismatch or versioning enabled. Aligning binary to $FLAVOR...${NC}"
+    fi
+fi
+
+if [ "$INSTALL_NEEDED" = true ]; then
+    echo -e "🚚 Downloading specialized binary..."
+    if [ -f "./overlord-${FLAVOR}" ]; then
+        echo -e "${GREEN}✨ Using locally built binary (overlord-${FLAVOR})${NC}"
+        cp "./overlord-${FLAVOR}" /usr/local/bin/overlord-daemon
+    elif [ -f "./$EXPECTED_NAME" ]; then
+        echo -e "${GREEN}✨ Using locally staged binary ($EXPECTED_NAME)${NC}"
+        cp "./$EXPECTED_NAME" /usr/local/bin/overlord-daemon
     elif ! curl -L "$BINARY_URL" -o /usr/local/bin/overlord-daemon; then
         echo -e "${RED}❌ Download failed! Check your internet connection or the release URL.${NC}"
         exit 1
     fi
 
-    # Verify binary integrity (only if newly downloaded/copied)
+    # Verify binary integrity
     FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
     if [ "$FILE_SIZE" -lt 1000 ]; then
         echo -e "${RED}❌ ERROR: Binary file is too small ($FILE_SIZE bytes).${NC}"
         exit 1
     fi
+    chmod +x /usr/local/bin/overlord-daemon
 fi
 
 # Download DB Reset Utility (Development Source)
