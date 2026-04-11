@@ -50,18 +50,16 @@ if [ ! -z "$MISSING_PACKAGES" ]; then
     apt-get update -y && apt-get install -y $MISSING_PACKAGES
 fi
 
-# 2. Architecture & Flavor Selection
+# 2. Architecture & Environment Selection
 ARCH=$(uname -m)
-IS_PVE=false
-[ -d "/etc/pve" ] && IS_PVE=true
 
-if [ "$IS_PVE" = true ]; then
-    FLAVOR="proxmox"
-    echo -e "🛰️  Detected Environment: ${CYAN}Proxmox Hypervisor${NC}"
-else
-    FLAVOR="host"
-    echo -e "🖥️  Detected Environment: ${CYAN}Standard Host / VM${NC}"
+if [ ! -d "/etc/pve" ]; then
+    echo -e "${RED}❌ ERROR: Proxmox Hypervisor not detected (/etc/pve).${NC}"
+    echo -e "Overlord is now an exclusive Proxmox Appliance. Installation aborted."
+    exit 1
 fi
+echo -e "🛰️  Detected Environment: ${CYAN}Proxmox Hypervisor${NC}"
+FLAVOR="proxmox"
 
 # 3. Binary Selection & Matching
 VERSION="v1.0.0"
