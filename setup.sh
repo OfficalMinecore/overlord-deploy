@@ -63,7 +63,7 @@ FLAVOR="proxmox"
 
 # 3. Binary Selection & Matching
 VERSION="v1.0.0"
-BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/${VERSION}"
+BASE_URL="https://github.com/OfficalMinecore/MineAI-Studio/releases/download/${VERSION}"
 if [ "$ARCH" == "x86_64" ]; then
     BINARY_URL="${BASE_URL}/overlord-${FLAVOR}-amd64"
     EXPECTED_NAME="overlord-${FLAVOR}-amd64"
