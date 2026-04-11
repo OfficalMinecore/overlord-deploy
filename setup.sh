@@ -64,7 +64,8 @@ else
 fi
 
 # 3. Binary Selection & Matching
-BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/v1.0.0"
+VERSION="v1.0.0"
+BASE_URL="https://github.com/OfficalMinecore/overlord-deploy/releases/download/${VERSION}"
 if [ "$ARCH" == "x86_64" ]; then
     BINARY_URL="${BASE_URL}/overlord-${FLAVOR}-amd64"
     EXPECTED_NAME="overlord-${FLAVOR}-amd64"
@@ -108,6 +109,9 @@ if [ "$INSTALL_NEEDED" = true ]; then
     elif [ -f "./$EXPECTED_NAME" ]; then
         echo -e "${GREEN}✨ Using locally staged binary ($EXPECTED_NAME)${NC}"
         cp "./$EXPECTED_NAME" /usr/local/bin/overlord-daemon
+    elif [ -f "./bin/$EXPECTED_NAME" ]; then
+        echo -e "${GREEN}✨ Using locally built release binary (bin/$EXPECTED_NAME)${NC}"
+        cp "./bin/$EXPECTED_NAME" /usr/local/bin/overlord-daemon
     elif ! curl -SfL "$BINARY_URL" -o /usr/local/bin/overlord-daemon || [ $(stat -c%s "/usr/local/bin/overlord-daemon") -lt 1000 ]; then
         echo -e "${BLUE}🔄 Download failed or asset missing (Size check failed).${NC}"
         
@@ -123,7 +127,7 @@ if [ "$INSTALL_NEEDED" = true ]; then
             fi
         else
             echo -e "${RED}❌ Download failed and no local source/Go compiler found.${NC}"
-            echo -e "💡 TIP: Please upload your binaries to the GitHub Release v1.1.0 first."
+            echo -e "💡 TIP: Please upload your binaries to the GitHub Release ${VERSION} first."
             exit 1
         fi
     fi
@@ -132,7 +136,7 @@ if [ "$INSTALL_NEEDED" = true ]; then
     FILE_SIZE=$(stat -c%s "/usr/local/bin/overlord-daemon")
     if [ "$FILE_SIZE" -lt 1000 ]; then
         echo -e "${RED}❌ ERROR: Binary file is too small ($FILE_SIZE bytes). GitHub returned a 404 or file is corrupt.${NC}"
-        echo -e "💡 TIP: Check if you have uploaded the assets to your GitHub Release v1.1.0."
+        echo -e "💡 TIP: Check if you have uploaded the assets to your GitHub Release ${VERSION}."
         exit 1
     fi
     chmod +x /usr/local/bin/overlord-daemon
